@@ -1,0 +1,16 @@
+B1 . Tai sdk 
+wget https://downloads.openwrt.org/releases/22.03.0/targets/ramips/mt76x8/openwrt-sdk-22.03.0-ramips-mt76x8_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+openwrt-sdk-gcc-11-2-0/staging_dir/toolchain-mipsel_24kc_gcc-11.2.0_musl
+
+# B2 Clone mqtt
+# git clone https://github.com/eclipse/paho.mqtt.c.git
+
+B3 Cross compile
+export STAGING_DIR=/mnt/windows10/openwrt-sdk-gcc-11-2-0/staging_dir/
+
+cd src/
+${STAGING_DIR}/toolchain-mipsel_24kc_gcc-11.2.0_musl/bin/mipsel-openwrt-linux-gcc -march=24kec -mips32r2  -mips16 *.c -c
+${STAGING_DIR}/toolchain-mipsel_24kc_gcc-11.2.0_musl/bin/mipsel-openwrt-linux-ar rcs libPahoMqttC.a *.o
+
+cd samples
+${STAGING_DIR}/toolchain-mipsel_24kc_gcc-11.2.0_musl/bin/mipsel-openwrt-linux-gcc MQTTClient_publish.c -L../  -l PahoMqttC -I../ -I./ -o app -lpthread -ldl

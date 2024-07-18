@@ -1,0 +1,15 @@
+{
+    "files.associations": {
+        "cstdlib": "c",
+        "pthread.h": "c",
+        "sstream": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "utility": "c",
+        "cerrno": "c",
+        "string": "c"
+    }
+}
