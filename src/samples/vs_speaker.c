@@ -186,6 +186,7 @@ typedef struct
 
 pthread_mutex_t m_mutex_dbg, m_mutex_mqtt, m_mutex_python, m_mutex_wdt, m_mutex_log_file;
 pthread_t p_mqtt_tid, p_socket_tid, p_gsm_tid, p_wdt_tid, p_audio_tid, p_log_tid;
+pthread_t p_network_monitor_tid;
 static gsm_state_t m_gsm_state = GSM_STATE_INIT;
 static uint32_t m_gsm_fsm_counter = 0;
 static char *gsm_module_name = "NA";
@@ -280,6 +281,7 @@ static int m_wdt_value = WDT_THREAD_ALL;
 static bool m_allow_audio_thread_run = true;
 static int m_last_streaming_master_level = -1;
 static int m_mqtt_error_counter = 0;
+static int m_ffmpeg_error_counter = 0;
 void uqmi_setting_prefer_lte();
 
 void reset_stream_monitor_data(void)
@@ -1277,7 +1279,7 @@ uint32_t debug_cb_log_to_file(const void *buffer, uint32_t len)
 
 uint32_t app_debug_output_cb(const void *buffer, uint32_t len)
 {
-    if (buffer)
+    if (buffer && m_device_config.log_to_tty)
     {
         // const uint8_t *ptr = buffer;
         // for (uint32_t i = 0; i < len; i++)
@@ -1941,6 +1943,40 @@ void* mqtt_thread(void* arg)
     DEBUG_WARN("Exit mqtt thread\r\n");
     // exit the current thread
     pthread_exit(NULL);
+}
+
+void* network_monitor_thread(void* arg)
+{
+    static uint32_t moniter_network_err_count = 0;
+    while(1)
+    {
+        int status = run_shell_cmd(NULL, 0, true, "timeout 3 ping -c2 8.8.8.8 && echo 1");
+        if (status == 0)
+        {
+            DEBUG_VERBOSE("Ping network success!\r\n");
+            moniter_network_err_count = 0;
+        }
+        else
+        {
+            if (++moniter_network_err_count >= 15)
+            {
+                moniter_network_err_count = 0;
+                m_ffmpeg_error_counter = 0;
+                DEBUG_ERROR("Ping network timeout, reload now!\r\n");
+                run_shell_cmd(NULL, 0, true, "/etc/init.d/network reload");
+                run_shell_cmd(NULL, 0, true, "/etc/init.d/network restart");
+            }
+        }
+        if (m_ffmpeg_error_counter >= 3)
+        {
+            m_ffmpeg_error_counter = 0;
+            moniter_network_err_count = 0;
+            DEBUG_ERROR("Network timeout, reload now!\r\n");
+            run_shell_cmd(NULL, 0, true, "/etc/init.d/network reload");
+            run_shell_cmd(NULL, 0, true, "/etc/init.d/network restart");
+        }
+        MSLEEP(5000);
+    }
 }
 
 static void do_ping(void)
@@ -3510,11 +3546,12 @@ void *audio_ffmpeg_thread(void* arg)
                 }
             }
 
-            if (poll_timeout_counter > 20)      //10s
+            if (poll_timeout_counter > 10)      //10s
             {
                 poll_timeout_counter = 0;
                 m_allow_audio_thread_run = false;
                 mqtt_publish_message("DBG", "Stream bad");
+                m_ffmpeg_error_counter++;
             }
         }
     }
@@ -3876,12 +3913,15 @@ int main(int argc, char* argv[])
     {
         pthread_create(&p_log_tid, NULL, &log_to_file_thread, NULL);
     }
+    // Create network monitor thread
+    pthread_create(&p_network_monitor_tid, NULL, &network_monitor_thread, NULL);
     // pthread_create(&p_audio_tid, NULL, &audio_ffmpeg_thread, NULL);
 
     pthread_join(p_mqtt_tid, NULL);
     // pthread_join(p_socket_tid, NULL);
     pthread_join(p_gsm_tid, NULL);
     pthread_join(p_wdt_tid, NULL);
+    pthread_join(p_network_monitor_tid, NULL);
 
     while (1)
     {
