@@ -1281,12 +1281,12 @@ uint32_t app_debug_output_cb(const void *buffer, uint32_t len)
 {
     if (buffer && m_device_config.log_to_tty)
     {
-        // const uint8_t *ptr = buffer;
-        // for (uint32_t i = 0; i < len; i++)
-        // {
-        //     putchar(ptr[i]);
-        // }
-        // fflush(stdout);
+        const uint8_t *ptr = buffer;
+        for (uint32_t i = 0; i < len; i++)
+        {
+            putchar(ptr[i]);
+        }
+        fflush(stdout);
         return len;
     }
     return 0;
@@ -1947,33 +1947,39 @@ void* mqtt_thread(void* arg)
 
 void* network_monitor_thread(void* arg)
 {
-    static uint32_t moniter_network_err_count = 0;
+    static uint32_t monitor_network_err_count = 0;
     while(1)
     {
         int status = run_shell_cmd(NULL, 0, true, "timeout 3 ping -c2 8.8.8.8 && echo 1");
         if (status == 0)
         {
             DEBUG_VERBOSE("Ping network success!\r\n");
-            moniter_network_err_count = 0;
+            monitor_network_err_count = 0;
         }
         else
         {
-            if (++moniter_network_err_count >= 15)
+            if (++monitor_network_err_count >= 15)
             {
-                moniter_network_err_count = 0;
+                monitor_network_err_count = 0;
                 m_ffmpeg_error_counter = 0;
                 DEBUG_ERROR("Ping network timeout, reload now!\r\n");
                 run_shell_cmd(NULL, 0, true, "/etc/init.d/network reload");
                 run_shell_cmd(NULL, 0, true, "/etc/init.d/network restart");
+                MSLEEP(4500);
             }
         }
-        if (m_ffmpeg_error_counter >= 3)
+        if (m_ffmpeg_error_counter == 3)
         {
-            m_ffmpeg_error_counter = 0;
-            moniter_network_err_count = 0;
+            //m_ffmpeg_error_counter = 0;
+            monitor_network_err_count = 0;
             DEBUG_ERROR("Network timeout, reload now!\r\n");
             run_shell_cmd(NULL, 0, true, "/etc/init.d/network reload");
             run_shell_cmd(NULL, 0, true, "/etc/init.d/network restart");
+            MSLEEP(4500);
+        }
+        if (m_ffmpeg_error_counter >= 6)
+        {
+            do_reboot();
         }
         MSLEEP(5000);
     }
